@@ -7,17 +7,59 @@ using System.Threading.Tasks;
 using Formation.AI;
 
 using Microsoft.ML;
+using Microsoft.ML.Data;
 
 namespace Formation
 {
-    public class BinaryClassificationTrainer : ITrainer<ClassificationModel.DataPoint, bool>
+    // Legacy exemple using BinaryClassifier
+    public class BinaryClassificationTrainer
     {
+        public class DataPoint
+        {
+            public bool Label { get; set; }
+
+            // Size = number of features
+            [VectorType(1)]
+            public float[] Features { get; set; }
+        }
+        
+        public class BinaryPrediction: DataPoint
+        {
+            [ColumnName("PredictedLabel")]
+            public bool PredictedLabel { get; set; }
+
+            [ColumnName("Probability")]
+            public float Probability { get; set; }
+
+            [ColumnName("Score")]
+            public float Score { get; set; }
+        }
+
+        public static DataPoint ConvertToDataPoint(ActivityData data)
+        {
+            return new DataPoint()
+            {
+                Label = data.IsUnused,
+                Features = GetFeatures(data)
+            };
+        }
+        
+        public static float[] GetFeatures(ActivityData data)
+        {
+            // If you add feature don't forget to update the size of the Vector Size above
+            return new float[]
+            {
+                data.HasTeams ? 1 : 0,
+            };
+        }
+        
+        
         private readonly AlgorithmType _algorithmType;
 
         private MLContext _mlContext;
         private ITransformer _trainedModel;
         private DataViewSchema _schema;
-        private PredictionEngine<ClassificationModel.DataPoint, ClassificationModel.BinaryPrediction> _predictionEngine;
+        private PredictionEngine<DataPoint, BinaryPrediction> _predictionEngine;
 
         public BinaryClassificationTrainer(AlgorithmType algorithmType)
         {
@@ -33,7 +75,7 @@ namespace Formation
             FastTree,
         }
 
-        public void Train(IEnumerable<ClassificationModel.DataPoint> trainingSet)
+        public void Train(IEnumerable<DataPoint> trainingSet)
         {
             this._mlContext = new MLContext(0);
 
@@ -63,10 +105,10 @@ namespace Formation
                     throw new ArgumentOutOfRangeException();
             }
 
-            this._predictionEngine = this._mlContext.Model.CreatePredictionEngine<ClassificationModel.DataPoint, ClassificationModel.BinaryPrediction>(this._trainedModel);
+            this._predictionEngine = this._mlContext.Model.CreatePredictionEngine<DataPoint, BinaryPrediction>(this._trainedModel);
         }
 
-        public void ComputeMetrics(IEnumerable<ClassificationModel.DataPoint> testSet)
+        public void ComputeMetrics(IEnumerable<DataPoint> testSet)
         {
             var testDataView = this._mlContext.Data.LoadFromEnumerable(testSet);
 
@@ -101,12 +143,12 @@ namespace Formation
         {
             var loadedModel = this._mlContext.Model.Load(path, out var modelInputSchema);
 
-            this._predictionEngine = this._mlContext.Model.CreatePredictionEngine<ClassificationModel.DataPoint, ClassificationModel.BinaryPrediction>(loadedModel);
+            this._predictionEngine = this._mlContext.Model.CreatePredictionEngine<DataPoint, BinaryPrediction>(loadedModel);
 
             return Task.CompletedTask;
         }
 
-        public bool Predict(ClassificationModel.DataPoint dataPoint)
+        public bool Predict(DataPoint dataPoint)
         {
             return this._predictionEngine.Predict(dataPoint).PredictedLabel;
         }

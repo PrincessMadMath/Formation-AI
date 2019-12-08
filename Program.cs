@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
+using Bomberjam.Bot;
+using Bomberjam.Bot.AI;
 using Formation.AI;
 
 namespace Formation
@@ -11,47 +12,62 @@ namespace Formation
     public class Program
     {
         // TODO-1: Change path to the data file
-        private static string dataPath = @"C:\tmp\data-28-11-2019\output.txt";
-        private static string modelSavePath = @"C:\Temp\inactive-model";
+        private static string dataPath = @"F:\tmp\output.txt";
+        private static string modelSavePath = @"F:\tmp\inactive-model.zip";
+        
+        enum ProgramRole {
+            TrainModel,
+            EvaluateFeatures,
+            DoExam,
+        }
+
 
         public static async Task Main()
         {
-            var trainer = GetTrainer();
-
-            Train(trainer);
-            DoExam();
+            // TODO-2: Choose if you want to train or do the exam
+            var role = ProgramRole.TrainModel;
+            
+            var smartBot = new RawSmartBot(MulticlassAlgorithmType.LightGbm, int.MaxValue);
+            
+            switch (role)
+            {
+                case ProgramRole.TrainModel:
+                    await TestModel(smartBot);
+                    break;
+                case ProgramRole.EvaluateFeatures:
+                    EvaluateFeatures(smartBot);
+                    break;
+                case ProgramRole.DoExam:
+                    DoExam(smartBot);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
         }
 
-        public static BinaryClassificationTrainer GetTrainer()
+        public static async Task TestModel<T>(ISmartBot<T> smartBot) where T : LabeledDataPoint
         {
-            // TODO-2: Choose your algorithm type
-            return new BinaryClassificationTrainer(BinaryClassificationTrainer.AlgorithmType.FastTree);
+            smartBot.Train(dataPath, true);
+            await smartBot.Save(modelSavePath);
         }
-
-        public static void Train(ITrainer<ClassificationModel.DataPoint, bool> trainer)
+        
+        // https://docs.microsoft.com/en-us/dotnet/machine-learning/how-to-guides/explain-machine-learning-model-permutation-feature-importance-ml-net
+        // Currently only support impact LightGbm algo
+        public static void EvaluateFeatures<T>(ISmartBot<T> smartBot) where T : LabeledDataPoint
         {
-            var loader = new ModelLoader<ClassificationModel.DataPoint>(ClassificationModel.ConvertToDataPoint);
-
-            var (trainingSet, testSet) = loader.LoadData(dataPath);
-
-            trainer.Train(trainingSet);
-
-            trainer.ComputeMetrics(testSet);
-
-            trainer.Save(modelSavePath);
+            smartBot.EvaluateFeatures(dataPath);
         }
-
-        public static void DoExam()
+        
+        public static void DoExam<T>(ISmartBot<T> smartBot) where T : LabeledDataPoint
         {
-            var trainer = GetTrainer();
 
-            trainer.Load(modelSavePath);
+            smartBot.Load(modelSavePath);
 
             var score = 0;
 
             foreach (var data in ExamData)
             {
-                var isInactive = trainer.Predict(ClassificationModel.ConvertToDataPoint(data.Data));
+                var isInactive = smartBot.Predict(smartBot.ExtractDataPoint(data.Data));
                 if (isInactive == data.IsUnused)
                 {
                     ++score;
@@ -59,13 +75,11 @@ namespace Formation
             }
 
             Console.WriteLine($"Score: {score}/{ExamData.Count}");
-
-            trainer.Save(modelSavePath);
         }
 
-        private static List<(ClassificationModel.ActivityModel Data, bool IsUnused)> ExamData = new List<(ClassificationModel.ActivityModel, bool)>
+        private static List<(ActivityData Data, bool IsUnused)> ExamData = new List<(ActivityData, bool)>
         {
-            (new ClassificationModel.ActivityModel()
+            (new ActivityData()
             {
                 TenantId = Guid.NewGuid().ToString(),
                 GroupId = Guid.NewGuid().ToString(),
@@ -81,7 +95,7 @@ namespace Formation
                 SiteCollectionLastActivityDate =  DateTimeOffset.Parse("2019-11-28T00:00:00.000Z"),
                 CapturedDate =  DateTimeOffset.Parse("2020-11-29T00:00:00.000Z"),
             }, true),
-            (new ClassificationModel.ActivityModel()
+            (new ActivityData()
             {
                 TenantId = Guid.NewGuid().ToString(),
                 GroupId = Guid.NewGuid().ToString(),
@@ -97,7 +111,7 @@ namespace Formation
                 SiteCollectionLastActivityDate =   DateTimeOffset.MinValue,
                 CapturedDate =  DateTimeOffset.Parse("2019-11-29T00:00:00.000Z"),
             }, true),
-            (new ClassificationModel.ActivityModel()
+            (new ActivityData()
             {
                 TenantId = Guid.NewGuid().ToString(),
                 GroupId = Guid.NewGuid().ToString(),
@@ -113,7 +127,7 @@ namespace Formation
                 SiteCollectionLastActivityDate =  DateTimeOffset.Parse("2019-11-20T00:00:00.000Z"),
                 CapturedDate =  DateTimeOffset.Parse("2019-11-29T00:00:00.000Z"),
             }, false),
-            (new ClassificationModel.ActivityModel()
+            (new ActivityData()
             {
                 TenantId = Guid.NewGuid().ToString(),
                 GroupId = Guid.NewGuid().ToString(),
@@ -129,7 +143,7 @@ namespace Formation
                 SiteCollectionLastActivityDate =  DateTimeOffset.Parse("2010-11-28T00:00:00.000Z"),
                 CapturedDate =  DateTimeOffset.Parse("2019-11-29T00:00:00.000Z"),
             }, false),
-            (new ClassificationModel.ActivityModel()
+            (new ActivityData()
             {
                 TenantId = Guid.NewGuid().ToString(),
                 GroupId = Guid.NewGuid().ToString(),
